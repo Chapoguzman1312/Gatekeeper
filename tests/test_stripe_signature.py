@@ -93,7 +93,43 @@ class PaymentLink(unittest.TestCase):
 
 
 class SubscriptionEnd(unittest.TestCase):
-    def test_prefers_current_period_end(self):
+    """Stripe moved current_period_end onto subscription items in the
+    2025-03-31.basil API version. Reading only the old location silently
+    produced members with no expiry, which made the whole sweep a no-op -
+    so both shapes are covered here."""
+
+    def test_reads_period_end_from_subscription_items(self):
+        """The current API shape."""
+        sub = {
+            "status": "active",
+            "items": {"data": [{"id": "si_1", "current_period_end": 1_700_000_000}]},
+        }
+        self.assertEqual(subscription_end(sub), 1_700_000_000)
+
+    def test_reads_period_end_from_the_top_level(self):
+        """The pre-basil API shape."""
+        self.assertEqual(subscription_end({"current_period_end": 100}), 100)
+
+    def test_items_win_over_the_top_level(self):
+        sub = {
+            "current_period_end": 100,
+            "items": {"data": [{"current_period_end": 500}]},
+        }
+        self.assertEqual(subscription_end(sub), 500)
+
+    def test_several_items_use_the_latest_end(self):
+        sub = {
+            "items": {
+                "data": [
+                    {"current_period_end": 300},
+                    {"current_period_end": 900},
+                    {"current_period_end": 600},
+                ]
+            }
+        }
+        self.assertEqual(subscription_end(sub), 900)
+
+    def test_prefers_period_end_over_cancel_at(self):
         self.assertEqual(
             subscription_end({"current_period_end": 100, "cancel_at": 200}), 100
         )
@@ -101,8 +137,18 @@ class SubscriptionEnd(unittest.TestCase):
     def test_falls_back_to_cancel_at(self):
         self.assertEqual(subscription_end({"cancel_at": 200}), 200)
 
+    def test_falls_back_to_ended_at(self):
+        self.assertEqual(subscription_end({"ended_at": 250}), 250)
+
     def test_returns_none_when_nothing_is_set(self):
         self.assertIsNone(subscription_end({"status": "active"}))
+
+    def test_tolerates_empty_items(self):
+        self.assertIsNone(subscription_end({"items": {"data": []}}))
+
+    def test_tolerates_items_without_period_end(self):
+        sub = {"items": {"data": [{"id": "si_1"}]}, "cancel_at": 400}
+        self.assertEqual(subscription_end(sub), 400)
 
     def test_ignores_null_and_zero_values(self):
         self.assertIsNone(subscription_end({"current_period_end": None, "cancel_at": 0}))

@@ -1,3 +1,7 @@
-aiohttp==3.10.11
-aiosqlite==0.20.0
-python-dotenv==1.0.1
+# Minimum versions rather than exact pins, so pip can pick a release with a
+# prebuilt wheel for whatever Python you are running. Exact pins are better
+# for a deployed service - once this installs cleanly, freeze them with
+#   py -m pip freeze > requirements.txt
+aiohttp>=3.13
+aiosqlite>=0.20
+python-dotenv>=1.0

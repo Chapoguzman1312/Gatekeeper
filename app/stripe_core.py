@@ -89,10 +89,36 @@ def payment_link_for(base_link: str, token: str) -> str:
     return f"{base_link}{separator}client_reference_id={quote(token, safe='')}"
 
 
+def _positive_int(value: Any) -> Optional[int]:
+    return value if isinstance(value, int) and value > 0 else None
+
+
 def subscription_end(subscription: Dict[str, Any]) -> Optional[int]:
-    """When the paid period runs out."""
-    for field in ("current_period_end", "cancel_at", "ended_at"):
-        value = subscription.get(field)
-        if isinstance(value, int) and value > 0:
+    """When the paid period runs out.
+
+    Stripe moved current_period_end off the subscription and onto its line
+    items in the 2025-03-31.basil API version. Both shapes are checked, newest
+    location first, so this keeps working whichever version an account is on -
+    and a subscription with several items is covered until its latest one ends.
+    """
+    # Current API: on each subscription item.
+    items = (subscription.get("items") or {}).get("data") or []
+    ends = [
+        end
+        for item in items
+        if isinstance(item, dict) and (end := _positive_int(item.get("current_period_end")))
+    ]
+    if ends:
+        return max(ends)
+
+    # Older API: on the subscription itself.
+    top_level = _positive_int(subscription.get("current_period_end"))
+    if top_level:
+        return top_level
+
+    # Cancelled subscriptions carry their end date in one of these instead.
+    for field in ("cancel_at", "ended_at"):
+        value = _positive_int(subscription.get(field))
+        if value:
             return value
     return None

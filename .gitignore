@@ -8,3 +8,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .DS_Store
+
+# Stripe CLI binary, if you keep it in the project folder for convenience
+stripe.exe
+stripe
